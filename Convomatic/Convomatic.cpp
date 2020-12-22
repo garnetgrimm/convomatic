@@ -24,25 +24,19 @@ void preview(AudioFile<double> *file, int channel, int size) {
 	cout << endl;
 }
 
-void convolve(double *g, double *h, double *x, int lenH, int lenX)
+double convolve( double *bufStart, double* currBuff, int bufSize, double *impulse, int impulseLen)
 {
-	int nconv = lenH + lenX - 1;
-	int i, j, h_start, x_start, x_end;
-
-	for (i = 0; i < min(200000,nconv); i++)
+	double result = 0;
+	for (int i = 0; i < impulseLen; i++)
 	{
-		if (i % 1000 == 0) {
-			cout << i << " out of " << nconv << endl;
+		if (currBuff <= bufStart) {
+			currBuff = bufStart + bufSize - 1;
 		}
-		x_start = max(0, i - lenH + 1);
-		x_end = min(i + 1, lenX);
-		h_start = min(i, lenH - 1);
-		for (j = x_start; j < x_end; j++)
-		{
-			g[i] += h[h_start--] * x[j];
-		}
+		result += *(currBuff--) * impulse[i];
 	}
+	return result;
 }
+
 
 int main() {
 	int channel = 0;
@@ -60,43 +54,54 @@ int main() {
 	if (!impulseFile.isMono()) impulseFile.samples.resize(1);
 
 	cout << "Beginning transformation" << endl;
-	outputFile.setNumSamplesPerChannel(inputFile.getNumSamplesPerChannel());
-	outputFile.setNumChannels(1);
 
 	auto start = high_resolution_clock::now();
+
+	int inputSamples = inputFile.getNumSamplesPerChannel();
+	int impulseSamples = impulseFile.getNumSamplesPerChannel();
+	int outputLen = inputSamples + impulseSamples - 1;
+
+	outputFile.setNumSamplesPerChannel(outputLen);
+	outputFile.setNumChannels(1);
+
 	double* result;
 	double* startInput = &inputFile.samples[channel][0];
 	double* startImpulse = &impulseFile.samples[channel][0];
-	result = (double*)calloc(inputFile.getNumSamplesPerChannel(), sizeof(double));
-	convolve(result, startImpulse, startInput, impulseFile.getNumSamplesPerChannel(), inputFile.getNumSamplesPerChannel());
-	
-	
-	//convolve(result, startInput, startImpulse, inputFile.getNumSamplesPerChannel(), impulseFile.getNumSamplesPerChannel());
-	//memcpy(&outputFile.samples[channel][0], &result, sizeof(double) * inputFile.getNumSamplesPerChannel());
-	
-	//WORKING
-	for (int i = 0; i < inputFile.getNumSamplesPerChannel(); i++) {
-		outputFile.samples[channel][i] = result[i] * 0.15;
+
+	const int bufSize = 50000;
+	double* buffer = (double*)calloc(bufSize, sizeof(double));
+	double *currBufPtr = &buffer[0];
+	memset(&buffer[0], 0, sizeof(double) * bufSize);
+
+	for (int i = 0; i < outputLen; i++)
+	{
+		//get current sample
+		double sample = inputFile.samples[channel][i];
+
+		//store input at current location
+		*currBufPtr = sample;
+
+		double conv = convolve(&buffer[0], currBufPtr, bufSize, startImpulse, impulseSamples);
+
+		//circular buffer
+		currBufPtr++;
+		if (currBufPtr > &buffer[0] + bufSize) {
+			currBufPtr = &buffer[0];
+		}
+
+		//write to output
+		outputFile.samples[channel][i] = conv * 0.05;
+
+		//report status
+		if (i % 1000 == 0) {
+			cout << i << " out of " << outputLen << endl;
+		}
 	}
 
-	/*
-	for (int i = 0; i < 5000; i++)
-	{
-		int inputSamplesLeft = inputFile.getNumSamplesPerChannel() - i;
-		int impulseSampleCount = impulseFile.getNumSamplesPerChannel();
-		if (i % 1000 == 0) {
-			cout << i << " out of " << inputFile.getNumSamplesPerChannel() << endl;
-		}
-		for (int impulseIdx = 0; impulseIdx < std::min(inputSamplesLeft, impulseSampleCount); impulseIdx++) {
-			double result = inputFile.samples[channel][i] * impulseFile.samples[channel][impulseIdx];
-			outputFile.samples[channel][i + impulseIdx] += result;
-		}
-	}
-	*/
 	auto end = high_resolution_clock::now();
 	double durr = std::chrono::duration<double>(end - start).count();
 	printf("Took %f seconds (%f per each sample)\r\n", durr, (inputFile.getNumSamplesPerChannel()) / durr);
-	outputFile.save("res/impulse-input.wav", AudioFileFormat::Wave);
+	outputFile.save("res/output1.wav", AudioFileFormat::Wave);
 
 	//graphFFT visualFFT;
 	//visualFFT.drawGraph((char*)"res/440Hz.wav");

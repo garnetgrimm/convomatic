@@ -1,6 +1,7 @@
 ﻿  Convomatic.cpp
+c:\users\garnet\source\repos\convomatic\convomatic\convomatic.cpp(67): warning C4101: 'result': unreferenced local variable
   Generating code
-  1 of 835 functions ( 0.1%) were compiled, the rest were copied from previous compilation.
+  2 of 833 functions ( 0.2%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
     0 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
